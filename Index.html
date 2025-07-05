@@ -1,0 +1,97 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document Retrieval</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .form-container { max-width: 400px; margin: 0 auto; }
+        label, input, button { display: block; margin: 10px 0; }
+        input { width: 100%; padding: 8px; }
+        button { padding: 10px; background-color: #4CAF50; color: white; border: none; cursor: pointer; }
+        #result { margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <div class="form-container">
+        <h2>Get Your Financial Documents</h2>
+        <div id="request-form">
+            <label for="pan">PAN:</label>
+            <input type="text" id="pan" placeholder="e.g., ABCDE1234F" required>
+            <label for="fy">Financial Year:</label>
+            <input type="text" id="fy" placeholder="e.g., 2023-24" required>
+            <label for="uniqueCode">Unique Code:</label>
+            <input type="text" id="uniqueCode" placeholder="e.g., ABC123" required>
+            <button onclick="retrieveDocuments()">Retrieve Documents</button>
+        </div>
+        <div id="result"></div>
+    </div>
+
+    <script>
+        const scriptURL = 'https://script.google.com/macros/s/AKfycbwYGdd9ZRW3k4Yzn18eV8BIdGk1aX9WXRiz8krcIYz4XMAaBKLQfh18ZSbB00cs7RXl/exec';  // Replace with your Web App URL
+
+        async function retrieveDocuments() {
+            const pan = document.getElementById('pan').value;
+            const fy = document.getElementById('fy').value;
+            const uniqueCode = document.getElementById('uniqueCode').value;
+            const response = await fetch(scriptURL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ pan, fy, uniqueCode })
+            });
+            const result = await response.json();
+            const resultDiv = document.getElementById('result');
+            if (result.status === 'success') {
+                let links = '<h3>Your Documents:</h3><ul>';
+                for (const [docType, url] of Object.entries(result.documents)) {
+                    links += `<li>${docType}: ${url === 'Not Available' ? url : `<a href="${url}" target="_blank">Download</a>`}</li>`;
+                }
+                links += '</ul>';
+                resultDiv.innerHTML = links;
+            } else {
+                resultDiv.innerHTML = result.message;
+            }
+        }
+    </script>
+</body>
+</html>
